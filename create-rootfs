@@ -1,0 +1,271 @@
+#!/bin/bash
+
+# create-rootfs: create the minimum root filesystem from qemu-debootstrap.
+#                and default version is ubuntu 14.04 trusty.
+
+PROG=$(basename $0)
+Usage () {
+  cat<<-_EOF_
+  usage: $PROG DIRECTORY
+  where:
+  DIRECTORY is the directory to store the generated root filesystem.
+
+  Example:
+  $PROG /home/rootfs/
+  
+  Instruction:
+  Default version to be generated is ubuntu 14.04 trusty.
+_EOF_
+}
+
+if (($#!=1));then
+  Usage
+  exit 1
+fi
+
+ch-mount () {
+  if [ "$1" == "-m" ] && [ -n "$2" ];
+  then
+    echo "I: MOUNTING"
+    echo "I: Mounting ${2}/proc..."
+    sudo mount -t proc /proc ${2}/proc
+    echo "I: Mounting ${2}/sys..."
+    sudo mount -t sysfs /sys ${2}/sys
+    echo "I: Mounting ${2}/dev..."
+    sudo mount -o bind /dev ${2}/dev
+    echo "I: Mounting ${2}/dev/pts..."
+    sudo mount -o bind /dev/pts ${2}/dev/pts
+  elif [ "$1" == "-u" ] && [ -n "$2" ];
+  then
+    echo "I: UNMOUNTING"
+    echo "I: Umounting ${2}/proc..."
+    sudo umount ${2}/proc
+    echo "I: Umounting ${2}/sys..."
+    sudo umount ${2}/sys
+    echo "I: Umounting ${2}/dev/pts..."
+    sudo umount ${2}/dev/pts
+    echo "I: Umounting ${2}/dev..."
+    sudo umount ${2}/dev
+  else
+    echo "E: mount/umount filesystem error!"
+    echo "E: Either 1'st, 2'nd or bothparameters were missing."
+    echo "E: For example: ch-mount -m /media/sdcard/"
+    exit 1
+  fi
+}
+
+echo "I: Starting creating root filesystem for amrhf..." &&
+directory=$1 &&
+tmp_directory=/tmp/
+rootfs_conf=configure-rootfs
+# 判断directory是否存在
+echo "I: Checking $directory exists or not..." &&
+([ -d $directory ] && echo "I: Directory $directory already exists...") || (mkdir -p $directory && echo "I: Directory $directory doesn't exist. Creating...") &&
+# 安装qemu-static解释器
+echo "I: Installing qemu-user-static..." &&
+sudo apt-get install qemu-user-static &&
+# 利用qemu-debootstrap命令获取最小裸文件系统，此过程要求网速良好，且需要10~20分钟时间
+echo "I: Fecthing minimum root filesystem files, this may take several minutes..." &&
+echo "I: Default version to be generated is ubuntu-14.04-trusy..."
+#sudo qemu-debootstrap --arch armhf --variant=minbase --verbose trusty $directory http://112.74.164.142/ubuntu-ports/ &&
+# 复制本机/etc/resolv.conf至新创建的文件系统中，以便后续chroot联网
+echo "I: Copying resolv.conf..." &&
+sudo cp -r /etc/resolv.conf $directory/etc/resolv.conf &&
+# 挂载相关文件系统并chroot
+echo "I: Mounting filesystems before chroot..."
+ch-mount -m $directory &&
+echo "I: Configuring sources.list file..."
+sudo cp -r $directory/etc/apt/sources.list $directory/etc/apt/sources.list.bak &&
+
+cat>$directory/etc/apt/sources.list<<-_EOF_
+# See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
+# newer versions of the distribution.
+
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty main restricted
+#deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty main restricted
+
+## Major bug fix updates produced after the final release of the
+## distribution.
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty-updates main restricted
+#deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-updates main restricted
+
+## Uncomment the following two lines to add software from the 'universe'
+## repository.
+## N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
+## team. Also, please note that software in universe WILL NOT receive any
+## review or updates from the Ubuntu security team.
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty universe
+# deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty universe
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty-updates universe
+# deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-updates universe
+
+## N.B. software from this repository may not have been tested as
+## extensively as that contained in the main release, although it includes
+## newer versions of some applications which may provide useful features.
+## Also, please note that software in backports WILL NOT receive any review
+## or updates from the Ubuntu security team.
+# deb http://ports.ubuntu.com/ubuntu-ports/ trusty-backports main restricted
+# deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-backports main restricted
+
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty-security main restricted
+# deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-security main restricted
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty-security universe
+# deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-security universe
+deb http://ports.ubuntu.com/ubuntu-ports/ trusty-security multiverse
+# deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-security multiverse
+_EOF_
+sleep 1
+sudo sed -i 's/ports.ubuntu.com/112.74.164.142/g' $directory/etc/apt/sources.list &&
+
+cat>$directory/$tmp_directory/$rootfs_conf<<-__EOF_
+#!/bin/bash
+
+# rootfs_conf: Configurations root filesystem after chroot.
+
+echo "I: Starting configuring the root filesystem..." &&
+echo "I: Executing apt-get update..." &&
+apt-get update &&
+echo "I: Installing necessary packages..." &&
+# 安装必需的基本软件包，此过程要求网速良好，且需要3~5分钟时间
+echo "I: The following packages will be installed..." &&
+cat<<-_EOF_
+  language-pack-en-base
+  sudo
+  ssh
+  net-tools
+  ethtool
+  wireless-tools
+  ifupdown
+  network-manager
+  iputils-ping
+  rsyslog
+  bash-completion
+  htop
+  resolvconf
+  dialog
+_EOF_
+
+echo "I: Starting installing..." &&
+apt-get install \
+  language-pack-en-base \
+  sudo \
+  ssh \
+  net-tools \
+  ethtool \
+  wireless-tools \
+  ifupdown \
+  network-manager \
+  iputils-ping \
+  rsyslog \
+  bash-completion \
+  htop \
+  resolvconf \
+  dialog \
+  --no-install-recommends &&
+
+#echo "I: Setting /usr/bin/sudo to be owned by uid 0 and have the setuid bit set..." &&
+#chown root:root /usr/bin/sudo &&
+#chmod 4755 /usr/bin/sudo &&
+
+# 添加用户ubuntu至sudo用户组
+echo "I: Add user ubuntu:" &&
+adduser ubuntu; echo "I: Revise root password:";passwd root;echo "I: Add user ubuntu to group sudo...";adduser ubuntu sudo &&
+
+echo "I: Configuring the host infomation..." &&
+# 设置主机名称
+echo "I: Setting the hostname as 'ubuntu-armhf'..." &&
+echo "ubuntu-armhf">/etc/hostname &&
+# 设置本机入口ip
+echo "127.0.0.1 localhost">>/etc/hosts &&
+echo "127.0.0.1 ubuntu-armhf">>/etc/hosts &&
+echo "I: Allowing auto update DNS..." &&
+# 允许自动更新dns
+dpkg-reconfigure resolvconf &&
+echo "I: Allowing auto update time..." &&
+# 设置时区
+dpkg-reconfigure tzdata &&
+
+echo "I: Configuring static ip..." &&
+echo "I: Setting eth0 as 192.168.1.115..." &&
+echo "I: Setting eth1 as 192.168.2.115..." &&
+echo "I: Adding nameservers 114.114.114.114 8.8.8.8... "
+# 设置静态ip
+mv /etc/network/interfaces /etc/network/interfaces.bak &&
+cat>/etc/network/interfaces<<_EOF_
+# interfaces(5) file used by ifup(8) and ifdown(8)
+# Include files from /etc/network/interfaces.d:
+#source-directory /etc/network/interfaces.d
+
+# loopback network interface
+auto lo
+iface lo inet loopback
+
+# primary network interface
+auto eth0
+iface eth0 inet static
+	address 192.168.2.115
+	netmask 255.255.255.0
+	gateway 192.168.2.1
+	dns-nameservers 114.114.114.114 8.8.8.8
+# hwaddress ether DE:AD:BE:EF:CA:FE
+
+auto eth1
+iface eth1 inet static
+	address 192.168.1.115
+	netmask 255.255.255.0
+	gateway 192.168.1.1
+# hwaddress ether DE:AD:BE:EF:CA:FE
+
+# wireless network interface
+# auto wlan0
+# iface wlan0 inet dhcp
+#	wpa-ssid "my_wifi_name"
+#	wpa-psk  "my_wifi_pass"
+_EOF_
+sleep 1
+
+echo "I: Configuring the serial service..." &&
+echo "I: Setting serial ttyO0 as the login port..." &&
+# 设置串口调试服务，板子上第一个串口是ttyO0
+cat>/etc/init/serial.conf<<-_EOF_
+start on stopped rc RUNLEVEL=[2345]
+stop on runlevel [!2345]
+respawn
+exec /sbin/getty 115200 ttyO0
+_EOF_
+sleep 1
+
+echo "I: Configuring the boot SD card ..." &&
+echo "I: Booting from mmcblk0p5(ext4), so flash this filesystem to your SD card's fifth partition..."
+# 设置SD卡启动参数，指定根目录/的挂载分区为根文件系统所在分区，这里是SD卡的第5分区
+mv /etc/fstab /etc/fstab.bak &&
+cat>/etc/fstab<<-_EOF_
+# <file system>   <dir>         <type>    <options>          <dump>      <pass>
+/dev/mmcblk0p5    /            ext4     defaults,noatime,errors=remount-ro   0      1
+/dev/mmcblk0p1    /boot/uboot   vfat      defaults,noatime                 0      0
+_EOF_
+sleep 1
+
+echo "I: Stopping failsafe delay..." &&
+sed -i 's/sleep\s[0-9]\{1,2\}/sleep 1/g' /etc/init/failsafe.conf &&
+
+echo "I: Self clean unecessary files and packages..." &&
+apt-get autoremove;apt-get autoclean;apt-get clean &&
+echo "I: Root filesystem configuration completed!" &&
+echo "I: Done!" &&
+echo "I: Exiting..." &&
+# 退出chroot，完成最小根文件系统制作
+exit
+
+__EOF_
+sleep 1
+
+echo "I: Chroot to ${directory}..." &&
+sudo chmod u+x $directory/$tmp_directory/$rootfs_conf &&
+sudo chroot $directory $tmp_directory/$rootfs_conf &&
+echo "I: Umounting the filesystems..." &&
+ch-mount -u $directory &&
+echo "I: Create root filesystem successfully in $directory..." &&
+echo "" &&
+echo "---------------------------Done! Enjoy!-------------------------------" &&
+echo ""
