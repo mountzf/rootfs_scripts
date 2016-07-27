@@ -4,6 +4,7 @@
 #                and default version is ubuntu 14.04 trusty.
 
 PROG=$(basename $0)
+
 Usage () {
   cat<<-_EOF_
   usage: $PROG DIRECTORY
@@ -18,66 +19,76 @@ Usage () {
 _EOF_
 }
 
-if (($#!=1));then
-  Usage
-  exit 1
-fi
+# 检查存放根文件系统的目录$directory
+Directory_Detect () {
 
+if [ -d $1 ]; then
+	echo "I: Directory $1 already exist."
+	if [ "$(ls -A $1)" == "" ];then
+		echo "I: Directory $1 is empty. OK."
+	else
+		echo "W: Directory $1 contains other files, and it's recommended to have an empty directory." &&
+		echo "I: Files are following:" &&
+		echo "$(ls -l $1)" &&
+		echo "Q: Which one would you like to do, continue, ignore or exit?" &&
+		echo -e "continue: delete files in $1 and continue, make sure don't need these files anymore..\
+		       \nignore  : keep these files in $1 and continue, choose this when continuing a last incompleted operation.\
+	               \nexit    : stop operation and exit." &&
+		echo -e "Q: What to do(continue/ignore/exit):\c"
+		while { read delfile;[ "$delfile" != "continue" ] && [ "$delfile" != "ignore" ] && [ "$delfile" != "exit" ]; }; do
+			echo -e "W: Invalid input. Please enter 'continue', 'ignore' or 'exit':\c"
+		done
+		if [ "$delfile" == "continue" ]; then
+			echo -e "I: Deleting files in ${1}...\c" && sudo rm -rf ${1}/* && echo " Done"
+		elif [ "$delfile" == "ignore" ]; then
+			echo "I: Keep files in $1 and continue."
+		else
+			echo "I: Choose to exit. Exit." && exit 1
+		fi
+	fi
+else
+	(echo -e "I: Directory $1 doesn't exist. Creating...\c" && \
+mkdir -p $1) && \
+echo " Done" || \
+(echo -e "\nE: Fatal error! Failed to create directory ${1}. Exit."&& exit 1)
+fi
+}
+
+# 挂载相关文件系统
 ch-mount () {
   if [ "$1" == "-m" ] && [ -n "$2" ];
   then
-    echo "I: MOUNTING"
-    echo "I: Mounting ${2}/proc..."
-    sudo mount -t proc /proc ${2}/proc
-    echo "I: Mounting ${2}/sys..."
-    sudo mount -t sysfs /sys ${2}/sys
-    echo "I: Mounting ${2}/dev..."
-    sudo mount -o bind /dev ${2}/dev
-    echo "I: Mounting ${2}/dev/pts..."
-    sudo mount -o bind /dev/pts ${2}/dev/pts
+    echo "I: MOUNTING" &&
+    echo -e "I: Mounting ${2}/proc...\c" &&
+    sudo mount -t proc /proc ${2}/proc && echo " Done"
+    echo -e "I: Mounting ${2}/sys...\c"
+    sudo mount -t sysfs /sys ${2}/sys && echo " Done"
+    echo -e "I: Mounting ${2}/dev...\c"
+    sudo mount -o bind /dev ${2}/dev && echo " Done"
+    echo -e "I: Mounting ${2}/dev/pts...\c"
+    sudo mount -o bind /dev/pts ${2}/dev/pts && echo " Done"
   elif [ "$1" == "-u" ] && [ -n "$2" ];
   then
     echo "I: UNMOUNTING"
-    echo "I: Umounting ${2}/proc..."
-    sudo umount ${2}/proc
-    echo "I: Umounting ${2}/sys..."
-    sudo umount ${2}/sys
-    echo "I: Umounting ${2}/dev/pts..."
-    sudo umount ${2}/dev/pts
-    echo "I: Umounting ${2}/dev..."
-    sudo umount ${2}/dev
+    echo -e "I: Umounting ${2}/proc...\c"
+    sudo umount ${2}/proc && echo " Done"
+    echo -e "I: Umounting ${2}/sys...\c"
+    sudo umount ${2}/sys && echo " Done"
+    echo -e "I: Umounting ${2}/dev/pts...\c"
+    sudo umount ${2}/dev/pts && echo " Done"
+    echo -e "I: Umounting ${2}/dev...\c"
+    sudo umount ${2}/dev && echo " Done"
   else
-    echo "E: mount/umount filesystem error!"
+    echo "E: Fatal error! mount/umount filesystem error!"
     echo "E: Either 1'st, 2'nd or bothparameters were missing."
     echo "E: For example: ch-mount -m /media/sdcard/"
     exit 1
   fi
 }
 
-echo "I: Starting creating root filesystem for amrhf..." &&
-directory=$1 &&
-tmp_directory=/tmp/
-rootfs_conf=configure-rootfs
-# 判断directory是否存在
-echo "I: Checking $directory exists or not..." &&
-([ -d $directory ] && echo "I: Directory $directory already exists...") || (mkdir -p $directory && echo "I: Directory $directory doesn't exist. Creating...") &&
-# 安装qemu-static解释器
-echo "I: Installing qemu-user-static..." &&
-sudo apt-get install qemu-user-static &&
-# 利用qemu-debootstrap命令获取最小裸文件系统，此过程要求网速良好，且需要10~20分钟时间
-echo "I: Fecthing minimum root filesystem files, this may take several minutes..." &&
-echo "I: Default version to be generated is ubuntu-14.04-trusy..."
-#sudo qemu-debootstrap --arch armhf --variant=minbase --verbose trusty $directory http://112.74.164.142/ubuntu-ports/ &&
-# 复制本机/etc/resolv.conf至新创建的文件系统中，以便后续chroot联网
-echo "I: Copying resolv.conf..." &&
-sudo cp -r /etc/resolv.conf $directory/etc/resolv.conf &&
-# 挂载相关文件系统并chroot
-echo "I: Mounting filesystems before chroot..."
-ch-mount -m $directory &&
-echo "I: Configuring sources.list file..."
-sudo cp -r $directory/etc/apt/sources.list $directory/etc/apt/sources.list.bak &&
-
-cat>$directory/etc/apt/sources.list<<-_EOF_
+# 创建新的sources.list文件
+Create_SourcesList () {
+cat>$1/etc/apt/sources.list<<-_EOF_
 # See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
 # newer versions of the distribution.
 
@@ -114,83 +125,24 @@ deb http://ports.ubuntu.com/ubuntu-ports/ trusty-security universe
 deb http://ports.ubuntu.com/ubuntu-ports/ trusty-security multiverse
 # deb-src http://ports.ubuntu.com/ubuntu-ports/ trusty-security multiverse
 _EOF_
-sleep 1
-sudo sed -i 's/ports.ubuntu.com/112.74.164.142/g' $directory/etc/apt/sources.list &&
+}
 
-cat>$directory/$tmp_directory/$rootfs_conf<<-__EOF_
+# 写入配置文件至新创建的根文件系统
+Create_RootfsConf () {
+
+cat>$1/$2/$3<<-__EOF_
 #!/bin/bash
 
-# rootfs_conf: Configurations root filesystem after chroot.
+# configure-rootfs: Configurations root filesystem after chroot.
 
+echo "" &&
+echo "I: Chroot successfully!" &&
+echo "" &&
 echo "I: Starting configuring the root filesystem..." &&
-echo "I: Executing apt-get update..." &&
-apt-get update &&
-echo "I: Installing necessary packages..." &&
-# 安装必需的基本软件包，此过程要求网速良好，且需要3~5分钟时间
-echo "I: The following packages will be installed..." &&
-cat<<-_EOF_
-  language-pack-en-base
-  sudo
-  ssh
-  net-tools
-  ethtool
-  wireless-tools
-  ifupdown
-  network-manager
-  iputils-ping
-  rsyslog
-  bash-completion
-  htop
-  resolvconf
-  dialog
-_EOF_
 
-echo "I: Starting installing..." &&
-apt-get install \
-  language-pack-en-base \
-  sudo \
-  ssh \
-  net-tools \
-  ethtool \
-  wireless-tools \
-  ifupdown \
-  network-manager \
-  iputils-ping \
-  rsyslog \
-  bash-completion \
-  htop \
-  resolvconf \
-  dialog \
-  --no-install-recommends &&
+# 生成静态ip地址配置文件
+Create_StaticIP () {
 
-#echo "I: Setting /usr/bin/sudo to be owned by uid 0 and have the setuid bit set..." &&
-#chown root:root /usr/bin/sudo &&
-#chmod 4755 /usr/bin/sudo &&
-
-# 添加用户ubuntu至sudo用户组
-echo "I: Add user ubuntu:" &&
-adduser ubuntu; echo "I: Revise root password:";passwd root;echo "I: Add user ubuntu to group sudo...";adduser ubuntu sudo &&
-
-echo "I: Configuring the host infomation..." &&
-# 设置主机名称
-echo "I: Setting the hostname as 'ubuntu-armhf'..." &&
-echo "ubuntu-armhf">/etc/hostname &&
-# 设置本机入口ip
-echo "127.0.0.1 localhost">>/etc/hosts &&
-echo "127.0.0.1 ubuntu-armhf">>/etc/hosts &&
-echo "I: Allowing auto update DNS..." &&
-# 允许自动更新dns
-dpkg-reconfigure resolvconf &&
-echo "I: Allowing auto update time..." &&
-# 设置时区
-dpkg-reconfigure tzdata &&
-
-echo "I: Configuring static ip..." &&
-echo "I: Setting eth0 as 192.168.1.115..." &&
-echo "I: Setting eth1 as 192.168.2.115..." &&
-echo "I: Adding nameservers 114.114.114.114 8.8.8.8... "
-# 设置静态ip
-mv /etc/network/interfaces /etc/network/interfaces.bak &&
 cat>/etc/network/interfaces<<_EOF_
 # interfaces(5) file used by ifup(8) and ifdown(8)
 # Include files from /etc/network/interfaces.d:
@@ -222,47 +174,215 @@ iface eth1 inet static
 #	wpa-ssid "my_wifi_name"
 #	wpa-psk  "my_wifi_pass"
 _EOF_
-sleep 1
+}
 
-echo "I: Configuring the serial service..." &&
-echo "I: Setting serial ttyO0 as the login port..." &&
-# 设置串口调试服务，板子上第一个串口是ttyO0
+# 配置串口调试服务
+Create_SerailConf () {
+
 cat>/etc/init/serial.conf<<-_EOF_
 start on stopped rc RUNLEVEL=[2345]
 stop on runlevel [!2345]
 respawn
 exec /sbin/getty 115200 ttyO0
 _EOF_
-sleep 1
+}
 
-echo "I: Configuring the boot SD card ..." &&
-echo "I: Booting from mmcblk0p5(ext4), so flash this filesystem to your SD card's fifth partition..."
-# 设置SD卡启动参数，指定根目录/的挂载分区为根文件系统所在分区，这里是SD卡的第5分区
-mv /etc/fstab /etc/fstab.bak &&
+# 设置挂载文件设置fstab文件
+Create_Fstab () {
+
 cat>/etc/fstab<<-_EOF_
 # <file system>   <dir>         <type>    <options>          <dump>      <pass>
 /dev/mmcblk0p5    /            ext4     defaults,noatime,errors=remount-ro   0      1
 /dev/mmcblk0p1    /boot/uboot   vfat      defaults,noatime                 0      0
 _EOF_
-sleep 1
+}
 
-echo "I: Stopping failsafe delay..." &&
-sed -i 's/sleep\s[0-9]\{1,2\}/sleep 1/g' /etc/init/failsafe.conf &&
+# 输出要安装的软件列表
+Output_Package () {
 
+cat<<-_EOF_
+  language-pack-en-base
+  sudo
+  ssh
+  net-tools
+  ethtool
+  wireless-tools
+  ifupdown
+  network-manager
+  iputils-ping
+  rsyslog
+  bash-completion
+  htop
+  resolvconf
+  dialog
+_EOF_
+}
+
+# 更新源目录树
+echo "I: Running command: apt-get update" &&
+(apt-get update && echo "I: Apt-get update successfully!" || \
+(echo "E: Fatal error! Failed to execute apt-get update, check your internet connecting. Exit" && exit 1))&&
+
+# 安装必需的基本软件包，此过程要求网速良好，且需要3~5分钟时间
+echo "I: Installing necessary packages..." &&
+echo "I: The following packages will be installed..." &&
+Output_Package &&
+
+echo "I: Starting installing..." &&
+(apt-get install \
+  language-pack-en-base \
+  sudo \
+  ssh \
+  net-tools \
+  ethtool \
+  wireless-tools \
+  ifupdown \
+  network-manager \
+  iputils-ping \
+  rsyslog \
+  bash-completion \
+  htop \
+  resolvconf \
+  dialog \
+  --no-install-recommends && \
+echo "I: Install packages successfully!" ||\
+(echo "E: Fatal error! Failed to install packages, check your internet connecting. Exit" && exit 1)) &&
+
+# 添加用户ubuntu至sudo用户组
+({ echo "I: Add user ubuntu:";\
+ adduser ubuntu; \
+echo "I: Revise root password:";\
+passwd root;\
+echo "I: Add user ubuntu to group sudo...";\
+adduser ubuntu sudo; } && \
+echo "I: User settings completed." ||\
+(echo "E: Fatal error! User settings failed. Exit." && exit 1)) &&
+
+# 设置主机名称
+echo "I: Configuring the host infomation..." &&
+echo "I: Setting the hostname as 'ubuntu-armhf'..." &&
+echo "ubuntu-armhf">/etc/hostname &&
+
+# 设置本机入口ip
+echo "127.0.0.1 localhost">>/etc/hosts &&
+echo "127.0.0.1 ubuntu-armhf">>/etc/hosts &&
+
+# 允许自动更新dns
+echo "I: Allowing auto update DNS..." &&
+(dpkg-reconfigure resolvconf && \
+echo "I: DNS settings completed." || \
+echo "E: DNS settings failed. Set afterward.") &&
+
+# 设置时区
+echo "I: Allowing auto update time..." &&
+(dpkg-reconfigure tzdata && \
+echo "I: Time settings completed." || \
+echo "E: Time settins failed. Set afterward.") &&
+
+# 设置静态ip
+echo "I: Configuring static ip..." &&
+echo "I: Setting eth0 as 192.168.1.115..." &&
+echo "I: Setting eth1 as 192.168.2.115..." &&
+echo "I: Adding nameservers 114.114.114.114 8.8.8.8... " &&
+({ mv /etc/network/interfaces /etc/network/interfaces.bak; \
+Create_StaticIP; } && \
+echo "I: Static ip settings completed." || \
+echo "E: Failed to configure static ip.") &&
+
+# 设置串口调试服务，板子上第一个串口是ttyO0
+echo "I: Configuring the serial service..." &&
+echo "I: Setting serial ttyO0 as the login port..." &&
+(Create_SerailConf && echo "I: Serial settings completed." || echo "E:  Serial settings failed.") && 
+
+# 设置SD卡启动参数，指定根目录/的挂载分区为根文件系统所在分区，这里是SD卡的第5分区
+echo "I: Configuring the boot SD card ..." &&
+echo "I: Booting from mmcblk0p5(ext4), so flash this filesystem to your SD card's fifth partition..." &&
+({ mv /etc/fstab /etc/fstab.bak; \
+Create_Fstab; } && \
+echo "I: Boot SD card settings completed." || \
+(echo "E: Fatal error! Boot SD card settings failed. Exit." && exit 1)) &&
+
+# 取消failsafe.conf文件中的延时
+echo -e "I: Stopping failsafe delay...\c" &&
+(sed -i 's/sleep\s[0-9]\{1,2\}/sleep 1/g' /etc/init/failsafe.conf && \
+echo " Done" || \
+echo -e "\nE: Stopping failsafe delay failed.") &&
+
+# 清理文件系统中不需要的文件
 echo "I: Self clean unecessary files and packages..." &&
-apt-get autoremove;apt-get autoclean;apt-get clean &&
+({ apt-get autoremove;\
+apt-get autoclean;\
+apt-get clean; } && \
+echo "I: Self clean completed." || \
+echo "E: Self clean failed.") && 
+
+# 退出chroot，完成最小根文件系统制作
 echo "I: Root filesystem configuration completed!" &&
 echo "I: Done!" &&
 echo "I: Exiting..." &&
-# 退出chroot，完成最小根文件系统制作
 exit
 
 __EOF_
-sleep 1
+}
 
+# 判断命令格式是否正确
+if (($#!=1));then
+  Usage
+  exit 1
+fi
+
+# 创建变量
+directory=$1 &&
+tmp_directory=/tmp/ &&
+rootfs_conf=configure-rootfs &&
+
+# 判断directory是否存在
+echo "I: Checking directory $directory state..." &&
+#([ -d $directory ] && echo "I: Directory $directory already exists...") || \
+#(mkdir -p $directory && echo "I: Directory $directory doesn't exist. Creating...") &&
+Directory_Detect $directory &&
+
+echo "I: Starting creating root filesystem for amrhf..." &&
+
+# 安装qemu-static解释器
+echo "I: Installing qemu-user-static..." &&
+(sudo apt-get install qemu-user-static && echo "I: Install qemu-user-static completed." || \
+(echo "E: Fatal error! Failed to install qemu-user-static. Exit." && exit 1)) &&
+
+# 利用qemu-debootstrap命令获取最小裸文件系统，此过程要求网速良好，且需要10~20分钟时间
+echo "I: Fecthing minimum root filesystem files, this may take several minutes..." &&
+echo "I: Default version to be generated is ubuntu-14.04-trusy..." &&
+(sudo qemu-debootstrap --arch armhf --variant=minbase --verbose trusty $directory http://112.74.164.142/ubuntu-ports/ \
+|| (echo "E: Fatal error! Failed to fetch minimum root filesystem. Exit." && exit 1)) &&
+
+# 复制本机/etc/resolv.conf至新创建的文件系统中，以便后续chroot联网
+echo -e "I: Copying resolv.conf...\c" &&
+(sudo cp /etc/resolv.conf $directory/etc/resolv.conf && echo " Done" || \
+(echo -e "\nE: Fatal error! Failed to copy resolv.conf file. Exit" && exit 1)) &&
+
+# chroot之前挂载相关文件系统
+echo "I: Mount filesystems before chroot" &&
+ch-mount -m $directory &&
+
+# 创建原sources的备份，并创建新的自己的服务器sources.list文件
+echo -e "I: Configuring sources.list file...\c" &&
+(sudo mv $directory/etc/apt/sources.list $directory/etc/apt/sources.list.bak && Create_SourcesList $directory && \
+sudo sed -i 's/ports.ubuntu.com/112.74.164.142/g' $directory/etc/apt/sources.list) && echo " Done" || \
+(echo -e "\nE: Fatal error! Failed to configure sources.list file. Exit" && exit 1) &&
+
+# 将需要执行的配置文件写入文件系统的/tmp文件中，以便chroot后执行
+echo -e "I: Write configuration file to $directory/$tmp_directory/$rootfs_conf...\c" &&
+(Create_RootfsConf $directory $tmp_directory $rootfs_conf && echo " Done" || \
+(echo -e "\nE: Fatal error! Failed to write configuration file. Exit." && exit 1)) &&
+
+# Chroot并执行配置文件
 echo "I: Chroot to ${directory}..." &&
-sudo chmod u+x $directory/$tmp_directory/$rootfs_conf &&
-sudo chroot $directory $tmp_directory/$rootfs_conf &&
+((sudo chmod u+x $directory/$tmp_directory/$rootfs_conf && sudo chroot $directory $tmp_directory/$rootfs_conf) && \
+echo "I: Chroot configuration completed. Exit." || \
+(echo "E: Fatal error! Failed to chroot to ${directory} or failed to configure root filesystem. Exit." && exit 1)) &&
+
+# Chroot配置文件执行完毕，配置完成，退出
+# 卸载相关文件系统
 echo "I: Umounting the filesystems..." &&
 ch-mount -u $directory &&
 echo "I: Create root filesystem successfully in $directory..." &&
