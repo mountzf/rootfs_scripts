@@ -23,7 +23,8 @@ _EOF_
 Directory_Detect () {
 
 if [ -d $1 ]; then
-	echo "I: Directory $1 already exist."
+	echo "I: Directory $1 already exist." &&
+	sleep $delay_time &&
 	if [ "$(ls -A $1)" == "" ];then
 		echo "I: Directory $1 is empty. OK."
 	else
@@ -34,7 +35,8 @@ if [ -d $1 ]; then
 		echo -e "continue: delete files in $1 and continue, make sure don't need these files anymore..\
 		       \nignore  : keep these files in $1 and continue, choose this when continuing a last incompleted operation.\
 	               \nexit    : stop operation and exit." &&
-		echo -e "Q: What to do(continue/ignore/exit):\c"
+		sleep $delay_time &&
+		echo -e "Q: What to do(continue/ignore/exit):\c" &&
 		while { read delfile;[ "$delfile" != "continue" ] && [ "$delfile" != "ignore" ] && [ "$delfile" != "exit" ]; }; do
 			echo -e "W: Invalid input. Please enter 'continue', 'ignore' or 'exit':\c"
 		done
@@ -59,24 +61,32 @@ ch-mount () {
   if [ "$1" == "-m" ] && [ -n "$2" ];
   then
     echo "I: MOUNTING" &&
+    sleep $delay_time &&
     echo -e "I: Mounting ${2}/proc...\c" &&
-    sudo mount -t proc /proc ${2}/proc && echo " Done"
-    echo -e "I: Mounting ${2}/sys...\c"
-    sudo mount -t sysfs /sys ${2}/sys && echo " Done"
-    echo -e "I: Mounting ${2}/dev...\c"
-    sudo mount -o bind /dev ${2}/dev && echo " Done"
-    echo -e "I: Mounting ${2}/dev/pts...\c"
+    sudo mount -t proc /proc ${2}/proc && echo " Done" &&
+    sleep $delay_time &&
+    echo -e "I: Mounting ${2}/sys...\c" &&
+    sudo mount -t sysfs /sys ${2}/sys && echo " Done" &&
+    sleep $delay_time &&
+    echo -e "I: Mounting ${2}/dev...\c" &&
+    sudo mount -o bind /dev ${2}/dev && echo " Done" &&
+    sleep $delay_time &&
+    echo -e "I: Mounting ${2}/dev/pts...\c" &&
     sudo mount -o bind /dev/pts ${2}/dev/pts && echo " Done"
   elif [ "$1" == "-u" ] && [ -n "$2" ];
   then
-    echo "I: UNMOUNTING"
-    echo -e "I: Umounting ${2}/proc...\c"
-    sudo umount ${2}/proc && echo " Done"
-    echo -e "I: Umounting ${2}/sys...\c"
-    sudo umount ${2}/sys && echo " Done"
-    echo -e "I: Umounting ${2}/dev/pts...\c"
-    sudo umount ${2}/dev/pts && echo " Done"
-    echo -e "I: Umounting ${2}/dev...\c"
+    echo "I: UNMOUNTING" &&
+    sleep $delay_time &&
+    echo -e "I: Umounting ${2}/proc...\c" &&
+    sudo umount ${2}/proc && echo " Done" &&
+    sleep $delay_time &&
+    echo -e "I: Umounting ${2}/sys...\c" &&
+    sudo umount ${2}/sys && echo " Done" &&
+    sleep $delay_time &&
+    echo -e "I: Umounting ${2}/dev/pts...\c" &&
+    sudo umount ${2}/dev/pts && echo " Done"&&
+    sleep $delay_time &&
+    echo -e "I: Umounting ${2}/dev...\c" &&
     sudo umount ${2}/dev && echo " Done"
   else
     echo "E: Fatal error! mount/umount filesystem error!"
@@ -134,11 +144,14 @@ cat>$1/$2/$3<<-__EOF_
 #!/bin/bash
 
 # configure-rootfs: Configurations root filesystem after chroot.
+delay_time=0.6
 
 echo "" &&
 echo "I: Chroot successfully!" &&
 echo "" &&
+sleep $delay_time &&
 echo "I: Starting configuring the root filesystem..." &&
+sleep $delay_time &&
 
 # 生成静态ip地址配置文件
 Create_StaticIP () {
@@ -225,9 +238,11 @@ echo "I: Running command: apt-get update" &&
 
 # 安装必需的基本软件包，此过程要求网速良好，且需要3~5分钟时间
 echo "I: Installing necessary packages..." &&
+sleep $delay_time &&
 echo "I: The following packages will be installed..." &&
 Output_Package &&
 
+sleep $delay_time &&
 echo "I: Starting installing..." &&
 (apt-get install \
   language-pack-en-base \
@@ -249,6 +264,7 @@ echo "I: Install packages successfully!" ||\
 (echo "E: Fatal error! Failed to install packages, check your internet connecting. Exit" && exit 1)) &&
 
 # 添加用户ubuntu至sudo用户组
+sleep $delay_time &&
 ({ echo "I: Add user ubuntu:";\
  adduser ubuntu; \
 echo "I: Revise root password:";\
@@ -259,7 +275,9 @@ echo "I: User settings completed." ||\
 (echo "E: Fatal error! User settings failed. Exit." && exit 1)) &&
 
 # 设置主机名称
+sleep $delay_time &&
 echo "I: Configuring the host infomation..." &&
+sleep $delay_time &&
 echo "I: Setting the hostname as 'ubuntu-armhf'..." &&
 echo "ubuntu-armhf">/etc/hostname &&
 
@@ -268,21 +286,27 @@ echo "127.0.0.1 localhost">>/etc/hosts &&
 echo "127.0.0.1 ubuntu-armhf">>/etc/hosts &&
 
 # 允许自动更新dns
+sleep $delay_time &&
 echo "I: Allowing auto update DNS..." &&
 (dpkg-reconfigure resolvconf && \
 echo "I: DNS settings completed." || \
 echo "E: DNS settings failed. Set afterward.") &&
 
 # 设置时区
+sleep $delay_time &&
 echo "I: Allowing auto update time..." &&
 (dpkg-reconfigure tzdata && \
 echo "I: Time settings completed." || \
 echo "E: Time settins failed. Set afterward.") &&
 
 # 设置静态ip
+sleep $delay_time &&
 echo "I: Configuring static ip..." &&
+sleep $delay_time &&
 echo "I: Setting eth0 as 192.168.1.115..." &&
+sleep $delay_time &&
 echo "I: Setting eth1 as 192.168.2.115..." &&
+sleep $delay_time &&
 echo "I: Adding nameservers 114.114.114.114 8.8.8.8... " &&
 ({ mv /etc/network/interfaces /etc/network/interfaces.bak; \
 Create_StaticIP; } && \
@@ -290,12 +314,16 @@ echo "I: Static ip settings completed." || \
 echo "E: Failed to configure static ip.") &&
 
 # 设置串口调试服务，板子上第一个串口是ttyO0
+sleep $delay_time &&
 echo "I: Configuring the serial service..." &&
+sleep $delay_time &&
 echo "I: Setting serial ttyO0 as the login port..." &&
 (Create_SerailConf && echo "I: Serial settings completed." || echo "E:  Serial settings failed.") && 
 
 # 设置SD卡启动参数，指定根目录/的挂载分区为根文件系统所在分区，这里是SD卡的第5分区
+sleep $delay_time &&
 echo "I: Configuring the boot SD card ..." &&
+sleep $delay_time &&
 echo "I: Booting from mmcblk0p5(ext4), so flash this filesystem to your SD card's fifth partition..." &&
 ({ mv /etc/fstab /etc/fstab.bak; \
 Create_Fstab; } && \
@@ -303,12 +331,14 @@ echo "I: Boot SD card settings completed." || \
 (echo "E: Fatal error! Boot SD card settings failed. Exit." && exit 1)) &&
 
 # 取消failsafe.conf文件中的延时
+sleep $delay_time &&
 echo -e "I: Stopping failsafe delay...\c" &&
 (sed -i 's/sleep\s[0-9]\{1,2\}/sleep 1/g' /etc/init/failsafe.conf && \
 echo " Done" || \
 echo -e "\nE: Stopping failsafe delay failed.") &&
 
 # 清理文件系统中不需要的文件
+sleep $delay_time &&
 echo "I: Self clean unecessary files and packages..." &&
 ({ apt-get autoremove;\
 apt-get autoclean;\
@@ -317,8 +347,10 @@ echo "I: Self clean completed." || \
 echo "E: Self clean failed.") && 
 
 # 退出chroot，完成最小根文件系统制作
+sleep $delay_time &&
 echo "I: Root filesystem configuration completed!" &&
 echo "I: Done!" &&
+sleep $delay_time &&
 echo "I: Exiting..." &&
 exit
 
@@ -335,6 +367,7 @@ fi
 directory=$1 &&
 tmp_directory=/tmp/ &&
 rootfs_conf=configure-rootfs &&
+delay_time=0.6
 
 # 判断directory是否存在
 echo "I: Checking directory $directory state..." &&
@@ -342,40 +375,50 @@ echo "I: Checking directory $directory state..." &&
 #(mkdir -p $directory && echo "I: Directory $directory doesn't exist. Creating...") &&
 Directory_Detect $directory &&
 
+sleep $delay_time &&
 echo "I: Starting creating root filesystem for amrhf..." &&
 
 # 安装qemu-static解释器
+sleep $delay_time &&
 echo "I: Installing qemu-user-static..." &&
 (sudo apt-get install qemu-user-static && echo "I: Install qemu-user-static completed." || \
 (echo "E: Fatal error! Failed to install qemu-user-static. Exit." && exit 1)) &&
 
 # 利用qemu-debootstrap命令获取最小裸文件系统，此过程要求网速良好，且需要10~20分钟时间
+sleep $delay_time &&
 echo "I: Fecthing minimum root filesystem files, this may take several minutes..." &&
+sleep $delay_time &&
 echo "I: Default version to be generated is ubuntu-14.04-trusy..." &&
 (sudo qemu-debootstrap --arch armhf --variant=minbase --verbose trusty $directory http://112.74.164.142/ubuntu-ports/ \
+&& echo "I: Fetching minimum root filesystem completed." \
 || (echo "E: Fatal error! Failed to fetch minimum root filesystem. Exit." && exit 1)) &&
 
 # 复制本机/etc/resolv.conf至新创建的文件系统中，以便后续chroot联网
+sleep $delay_time &&
 echo -e "I: Copying resolv.conf...\c" &&
 (sudo cp /etc/resolv.conf $directory/etc/resolv.conf && echo " Done" || \
 (echo -e "\nE: Fatal error! Failed to copy resolv.conf file. Exit" && exit 1)) &&
 
 # chroot之前挂载相关文件系统
+sleep $delay_time &&
 echo "I: Mount filesystems before chroot" &&
 ch-mount -m $directory &&
 
 # 创建原sources的备份，并创建新的自己的服务器sources.list文件
+sleep $delay_time &&
 echo -e "I: Configuring sources.list file...\c" &&
 (sudo mv $directory/etc/apt/sources.list $directory/etc/apt/sources.list.bak && Create_SourcesList $directory && \
 sudo sed -i 's/ports.ubuntu.com/112.74.164.142/g' $directory/etc/apt/sources.list) && echo " Done" || \
 (echo -e "\nE: Fatal error! Failed to configure sources.list file. Exit" && exit 1) &&
 
 # 将需要执行的配置文件写入文件系统的/tmp文件中，以便chroot后执行
+sleep $delay_time &&
 echo -e "I: Write configuration file to $directory/$tmp_directory/$rootfs_conf...\c" &&
 (Create_RootfsConf $directory $tmp_directory $rootfs_conf && echo " Done" || \
 (echo -e "\nE: Fatal error! Failed to write configuration file. Exit." && exit 1)) &&
 
 # Chroot并执行配置文件
+sleep $delay_time &&
 echo "I: Chroot to ${directory}..." &&
 ((sudo chmod u+x $directory/$tmp_directory/$rootfs_conf && sudo chroot $directory $tmp_directory/$rootfs_conf) && \
 echo "I: Chroot configuration completed. Exit." || \
@@ -383,9 +426,13 @@ echo "I: Chroot configuration completed. Exit." || \
 
 # Chroot配置文件执行完毕，配置完成，退出
 # 卸载相关文件系统
+sleep $delay_time &&
 echo "I: Umounting the filesystems..." &&
+sleep $delay_time &&
 ch-mount -u $directory &&
+sleep $delay_time &&
 echo "I: Create root filesystem successfully in $directory..." &&
 echo "" &&
+sleep $delay_time &&
 echo "---------------------------Done! Enjoy!-------------------------------" &&
 echo ""

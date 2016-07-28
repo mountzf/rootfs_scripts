@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# gui-install: Install graphics user interface support on ubuntu-14.04-trusty OS, such as Xorg, lxde-core and so on.
+
+delay_time=0.6
+cat<<_EOF_
+Q: Which one would you want to install, Xorg only or Xorg and lxde?
+1) Xorg only         : Only install GUI support componets Xorg, don't install desktop environment, but can use other GUI applications.
+2) Xorg and lxde-core: Install GUI support componets Xorg and minimum desktop environment lxde-core. This may take more memory and disk.
+3) Xorg and lxde     : Install GUI support componets Xorg and full desktop environment lxde. This may take much more memory and disk.
+4) Exit              : Stop operation and exit.
+_EOF_
+
+sleep $delay_time &&
+echo -e "Q: What to do(1/2/3/4):\c" &&
+read gui_option &&
+loop_flag=true &&
+while $loop_flag; do
+case $gui_option in
+        1)
+        loop_flag=false
+        echo "I: Only install GUI support componets Xorg." &&
+        sleep $delay_time &&
+        echo "I: Running command: sudo apt-get install Xorg" &&
+        (sudo apt-get install Xorg && echo "I: Install Xorg completed. Exit." || (echo "E: Install Xorg failed. Exit." && exit 1)) &&
+        exit 0
+        ;;
+        2)
+        loop_flag=false
+        echo "I: Install GUI support componets Xorg and minimum desktop environment lxde-core." &&
+        sleep $delay_time &&
+        echo "I: Running command: sudo apt-get install Xorg lxde-core" &&
+        sudo apt-get installXorg lxde-core && echo "I: Install Xorg and lxde-core completed. Exit." || (echo "E: Install Xorg and lxde-core failed. Exit." && exit 1)
+ &&
+        exit 0
+        ;;
+        3)
+        loop_flag=false
+        echo "I: Install GUI support componets Xorg and full desktop environment lxde." &&
+        sleep $delay_time &&
+        echo "I: Running command: sudo apt-get install Xorg lxde" &&
+        sudo apt-get install Xorg lxde && echo "I: Install Xorg and lxde completed. Exit." || (echo "E: Install Xorg and lxde failed. Exit." && exit 1) &&
+        exit 0
+        ;;
+        4)
+        loop_flag=false
+        echo "I: Choose to exit. Eixt."
+        exit 0
+        ;;
+        *)
+        echo -e "W: Invalid input. Please input '1', '2', '3' or '4':\c"
+        read gui_option
+        ;;
+esac
+done
+

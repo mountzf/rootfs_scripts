@@ -1,0 +1,182 @@
+#!/bin/bash
+
+# ros-install: Install ROS Indigo based on Xorg and ubuntu-14.04-trusty.
+
+# 输出安装选项的函数
+Output_InstallOPT () {
+cat<<_EOF_
+Q: What kind of ROS packages would you like to install, Desktop-Full(recommend), Desktop or ROS-Base?
+1) Desktop-Full: Including ROS, rqt, rviz, robot-generic libraries, 2D/3D simulators, navigation and 2D/3D perception.
+2) Desktop     : Including ROS, rqt, rviz, and robot-generic libraries.
+3) ROS-Base    : Only including ROS package, build, and communication libraries. No GUI tools.
+4) Exit        : Stop operation and exit.
+_EOF_
+}
+
+# 检查当前系统版本是否符合要求
+Detect_OS () {
+
+echo "I: Detecting current OS version..." &&
+sleep $delay_time &&
+version=$(cat /etc/issue) &&
+if [[ "${version%%\ \*}"=~"Ubuntu 14.04.*? LTS" ]]; then
+	echo "I: Current OS is ${version%%\ \*}. OK"
+else
+	echo "E: Fatal error! Current OS is not ubuntu-14.04-trusty. Exit." && exit 1
+fi
+}
+
+# 检查是否安装GUI支持
+Detect_Xorg () {
+
+echo "I: Detecting GUI support components Xorg installed or not..." &&
+sleep $delay_time &&
+if ! which X>/dev/null; then
+	echo "E: Fatal error! GUI support componets Xorg not installed. Can't install ${1}. Exit." && exit 1
+else
+	echo "I: GUI support componets Xorg already installed. OK" &&
+	echo "I: Starting install ${1}..."
+fi
+}
+
+
+# ROS安装前环境准备
+ROS_Before () {
+
+# 设置系统语言变量
+echo -e "I: Setting system locale...\c" &&
+sleep $delay_time &&
+sudo update-locale LANG=C LANGUAGE=C LC_ALL=C LC_MESSAGES=POSIX && \
+echo " Done" ||\
+(echo -e "\nE: Fatal error! Setting system locale failed. Exit.\
+\nYou may try:\
+\nexport LANGUAGE=en_US.UTF-8\
+\nexport LANG=en_US.UTF-8\
+\nexport LC_ALL=en_US.UTF-8\
+\nlocale-gen en_US.UTF-8\
+\n dpkg-reconfigure locales"\
+ && exit 1) &&
+
+# 设置ROS源地址
+echo -e "I: Adding ROS packages sources.list...\c" &&
+sleep $delay_time &&
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu trusty main" > \
+/etc/apt/sources.list.d/ros-latest.list' && echo " Done" || \
+(echo -e "\nE: Fatal error! Adding ROS packages sources.list failed. Exit.") &&
+
+# 设置密钥验证
+echo -e "I: Setting ROS packages keys...\c" &&
+sleep $delay_time &&
+sudo apt-key adv --keyserver hkp://ha.pool.sks-keyservers.net --recv-key 0xB01FA116 && \
+echo " Done" || \
+(echo -e "\nE: Fatal error! Setting ROS packages keys failed. Exit." && exit 1) &&
+
+# 更新源目录树
+echo "I: Updating your ubuntu packages index..." &&
+sleep $delay_time &&
+echo "I: Running command: sudo apt-get update" &&
+sudo apt-get update && echo "I: Updating your ubuntu packages index completed." || \
+echo "Updating your ubuntu packages index failed, please check." 
+}
+
+# ROS安装后环境设置
+ROS_After () {
+
+# Initialize rosdep
+echo "I: Initialize rosdep" &&
+(sudo apt-get install python-rosdep && sudo rosdep init && rosdep update) && \
+echo "I: Initialize rosdep completed." || \
+echo "E: Initialize rosdep failed, please check." &&
+
+# ROS环境变量设置
+echo -e "I: Setting ROS environment...\c" &&
+sleep $delay_time &&
+(echo "source /opt/ros/indigo/setup.bash" >> ~/.bashrc && source ~/.bashrc) && \
+echo " Done" || \
+echo -e "\nE: Setting ROS environment failed." &&
+
+# Getting rosinstall
+# rosinstall is a frequently used command-line tool in ROS that is distributed separately. It enables you to easily download many source trees for ROS packages with one command
+echo "I: Installing rosinstall..." &&
+sleep $delay_time &&
+echo "I: Running command: sudo apt-get install python-rosinstall" &&
+sudo apt-get install python-rosinstall && \
+echo "I: Installing rosinstall completed." || \
+echo "E: Installing rosinstall failed, please check." &&
+
+# 验证环境变量并打印安装成功信息
+printenv | grep ROS &&
+echo "" &&
+echo "-------------------------ROS installation complete. Enjoy!---------------------------" &&
+echo ""
+}
+
+# 开始安装ROS软件包
+delay_time=0.5
+echo "I: Prepare to install ROS packages" &&
+sleep $delay_time &&
+# 检查安装所需条件：Xorg, ubuntu-14.04-trusty &&
+Detect_OS &&
+
+sleep $delay_time &&
+# 输出安装选项
+Output_InstallOPT &&
+
+sleep $delay_time &&
+echo -e "Q: What to do(1/2/3/4):\c" &&
+read ros_option &&
+loop_flag=true &&
+while $loop_flag; do
+case $ros_option in
+        1)
+        loop_flag=false
+	Detect_Xorg ROS-Desktop-Full &&
+	sleep $delay_time &&
+	ROS_Before &&
+	sleep $delay_time &&
+	echo "I: Running command: sudo apt-get install ros-indigo-desktop-full" &&
+	sudo apt-get install ros-indigo-desktop-full && \
+echo "I: Install ros-indigo-desktop-full completed." || \
+(echo "E: Install ros-indigo-desktop-full failed. Exit." && exit 1 ) &&
+	ROS_After &&
+	exit 0
+	;;
+        2)
+        loop_flag=false
+        Detect_Xorg ROS-Desktop &&
+	sleep $delay_time &&
+        ROS_Before &&
+	sleep $delay_time &&
+        echo "I: Running command: sudo apt-get install ros-indigo-desktop" &&
+        sudo apt-get install ros-indigo-desktop && \
+echo "I: Install ros-indigo-desktop completed." || \
+(echo "E: Install ros-indigo-desktop failed. Exit." && exit 1 ) &&
+        ROS_After &&
+        exit 0
+        ;;
+        3)
+        loop_flag=false
+	echo "I: ROS-Base doesn't need GUI support. OK" &&
+	sleep $delay_time &&
+	echo "I: Starting install ROS-Base..." &&
+	sleep $delay_time &&
+        ROS_Before &&
+	sleep $delay_time &&
+        echo "I: Running command: sudo apt-get install ros-indigo-ros-base" &&
+        sudo apt-get install ros-indigo-ros-base && \
+echo "I: Install ros-indigo-ros-base completed." || \
+(echo "E: Install ros-indigo-ros-base failed. Exit." && exit 1 ) &&
+        ROS_After &&
+        exit 0
+        ;;
+        4)
+        loop_flag=false
+        echo "I: Choose to exit. Eixt."
+        exit 0
+        ;;
+        *)
+        echo -e "W: Invalid input. Please input '1', '2', '3' or '4':\c"
+        read ros_option
+        ;;
+esac
+done
