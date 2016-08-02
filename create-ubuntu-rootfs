@@ -42,7 +42,8 @@ if [ -d $1 ]; then
 			echo -e "W: Invalid input. Please enter 'continue', 'ignore' or 'exit':\c"
 		done
 		if [ "$delfile" == "continue" ]; then
-			echo -e "I: Deleting files in ${1}...\c" && sudo rm -rf ${1}/* && echo " Done"
+			echo -e "I: Deleting files in ${1}...\c" && 
+			sudo rm -rf ${1}/* && echo " Done" || { echo -e "\nE: Fatal error! Deleting files in ${1} failed. Exit." && exit 1; } 
 		elif [ "$delfile" == "ignore" ]; then
 			echo "I: Keep files in $1 and continue."
 		else
@@ -160,6 +161,12 @@ CH_Mount () {
     exit 1
   fi
 }
+
+# 判断是否是root权限执行
+if [ \$(id -u) -ne 0 ]; then
+        echo "E: Permission denied. Are you root?" &&
+        exit 1
+fi
 
 delay_time=0.6 &&
 CH_Mount \$1 \$2
@@ -446,6 +453,12 @@ cat>$1/$2<<__EOF_
 
 # gui-install: Install graphics user interface support on ubuntu-14.04-trusty OS, such as Xorg, lxde-core and so on.
 
+# 判断是否是root权限执行
+if [ \$(id -u) -ne 0 ]; then
+        echo "E: Permission denied. Are you root?" &&
+        exit 1
+fi
+
 delay_time=0.6
 
 # 打印安装选项
@@ -624,6 +637,9 @@ ROS_After () {
 
 # Initialize rosdep
 echo "I: Initialize rosdep" &&
+echo "I: Running command: sudo apt-get install python-rosdep" &&
+echo "I: Running command: sudo rosdep" &&
+echo "I: Running command: rosdep update" &&
 { sudo apt-get install python-rosdep && sudo rosdep init && rosdep update; } && \
 echo "I: Initialize rosdep completed." || \
 echo "E: Initialize rosdep failed, please check." &&
@@ -645,11 +661,22 @@ echo "I: Installing rosinstall completed." || \
 echo "E: Installing rosinstall failed, please check." &&
 
 # 验证环境变量并打印安装成功信息
-printenv | grep ROS &&
+[ \$(id -u) -eq 0 ] || { printenv | grep ROS; } &&
 echo "" &&
 echo "-------------------------ROS installation complete. Enjoy!---------------------------" &&
 echo ""
 }
+
+# 推荐使用普通用户权限执行，详情见ROS安装官网：http://wiki.ros.org/indigo/Installation/UbuntuARM
+if [ \$(id -u) -eq 0 ]; then
+        echo "W: Running this sreipts as 'root' is not recommended." &&
+	echo -e "Q: Exit to run as 'normal' or till continue(exit/continue):\\c" &&
+	read user_option &&
+	if [ "\$user_option" == "exit" ]; then
+		echo "I: Choose to exit." &&
+		exit 1
+	fi
+fi
 
 # 开始安装ROS软件包
 delay_time=0.5
@@ -735,6 +762,12 @@ sudo chmod +x $1/$2 && echo " Done" || echo -e "\nE: Adding executable mode to $
 if (($#!=1));then
   Usage
   exit 1
+fi
+
+# 判断是否是root权限执行
+if [ $(id -u) -ne 0 ]; then
+	echo "E: Permission denied. Are you root?" &&
+	exit 1
 fi
 
 # 创建变量

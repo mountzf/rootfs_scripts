@@ -11,6 +11,14 @@ Q: Which one would you want to install, Xorg only or Xorg and lxde?
 4) Exit              : Stop operation and exit.
 _EOF_
 
+# 打印安装完成信息
+Print_MSG () {
+echo "I: To configure X settings, go to directory /usr/share/X11/xorg.conf.d." &&
+echo "" &&
+echo "----------------------------Install Xorg components completed. Enjoy!--------------------------------" &&
+echo ""
+}
+
 sleep $delay_time &&
 echo -e "Q: What to do(1/2/3/4):\c" &&
 read gui_option &&
@@ -23,6 +31,7 @@ case $gui_option in
         sleep $delay_time &&
         echo "I: Running command: sudo apt-get install Xorg" &&
         (sudo apt-get install Xorg && echo "I: Install Xorg completed. Exit." || (echo "E: Install Xorg failed. Exit." && exit 1)) &&
+	Print_MSG &&
         exit 0
         ;;
         2)
@@ -32,6 +41,7 @@ case $gui_option in
         echo "I: Running command: sudo apt-get install Xorg lxde-core" &&
         sudo apt-get installXorg lxde-core && echo "I: Install Xorg and lxde-core completed. Exit." || (echo "E: Install Xorg and lxde-core failed. Exit." && exit 1)
  &&
+	Print_MSG &&
         exit 0
         ;;
         3)
@@ -40,11 +50,13 @@ case $gui_option in
         sleep $delay_time &&
         echo "I: Running command: sudo apt-get install Xorg lxde" &&
         sudo apt-get install Xorg lxde && echo "I: Install Xorg and lxde completed. Exit." || (echo "E: Install Xorg and lxde failed. Exit." && exit 1) &&
+	Print_MSG &&
         exit 0
         ;;
         4)
         loop_flag=false
-        echo "I: Choose to exit. Eixt."
+        echo "I: Choose to exit. Eixt." &&
+	echo ""
         exit 0
         ;;
         *)
